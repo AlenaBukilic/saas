@@ -1,6 +1,6 @@
 import os
 from fastapi import FastAPI, Depends
-from fastapi.responses import StreamingResponse
+from fastapi.responses import PlainTextResponse
 from fastapi_clerk_auth import ClerkConfig, ClerkHTTPBearer, HTTPAuthorizationCredentials
 from openai import OpenAI
 
@@ -10,23 +10,12 @@ clerk_config = ClerkConfig(jwks_url=os.getenv("CLERK_JWKS_URL"))
 clerk_guard = ClerkHTTPBearer(clerk_config)
 
 
-@app.get("/api")
+@app.get("/api", response_class=PlainTextResponse)
 def idea(creds: HTTPAuthorizationCredentials = Depends(clerk_guard)):
     user_id = creds.decoded["sub"]
     client = OpenAI()
     prompt = [
-        {"role": "user", "content": "Reply with a new business idea for AI Agents, formatted with headings, sub-headings and bullet points."}
+        {"role": "user", "content": "Reply with a new business idea for AI Agents, formatted with headings, sub-headings and bullet points. Keep it to the point and concise."}
     ]
-    stream = client.chat.completions.create(model="gpt-5-nano", messages=prompt, stream=True)
-
-    def event_stream():
-        for chunk in stream:
-            text = chunk.choices[0].delta.content
-            if text:
-                lines = text.split("\n")
-                for line in lines[:-1]:
-                    yield f"data: {line}\n\n"
-                    yield "data:  \n"
-                yield f"data: {lines[-1]}\n\n"
-
-    return StreamingResponse(event_stream(), media_type="text/event-stream")
+    response = client.chat.completions.create(model="gpt-5-nano", messages=prompt, stream=False)
+    return response.choices[0].message.content or ""
